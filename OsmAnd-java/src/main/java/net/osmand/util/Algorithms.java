@@ -49,6 +49,11 @@ public class Algorithms {
 	private static char[] CHARS_TO_NORMALIZE_KEY = new char['’'];
 	private static char[] CHARS_TO_NORMALIZE_VALUE = new char['\''];
 
+	public static final int ZIP_FILE_SIGNATURE = 0x504b0304;
+	public static final int XML_FILE_SIGNATURE = 0x3c3f786d;
+	public static final int OBF_FILE_SIGNATURE = 0x08029001;
+	public static final int SQLITE_FILE_SIGNATURE = 0x53514C69;
+
 	public static String normalizeSearchText(String s) {
 		boolean norm = false;
 		for (int i = 0; i < s.length() && !norm; i++) {
@@ -293,7 +298,7 @@ public class Algorithms {
 		FileInputStream in = new FileInputStream(file);
 		int test = readInt(in);
 		in.close();
-		return test == 0x504b0304;
+		return test == ZIP_FILE_SIGNATURE;
 	}
 
 	/**
@@ -322,7 +327,7 @@ public class Algorithms {
 		return false;
 	}
 
-	private static int readInt(InputStream in) throws IOException {
+	public static int readInt(InputStream in) throws IOException {
 		int ch1 = in.read();
 		int ch2 = in.read();
 		int ch3 = in.read();
@@ -479,7 +484,6 @@ public class Algorithms {
 		}
 	}
 
-
 	public static void streamCopy(InputStream in, OutputStream out, IProgress pg, int bytesDivisor) throws IOException {
 		byte[] b = new byte[BUFFER_SIZE];
 		int read;
@@ -522,7 +526,6 @@ public class Algorithms {
 		} else if (f.getName().endsWith(".andnav2")) { //$NON-NLS-1$
 			f.renameTo(new File(f.getAbsolutePath().substring(0, f.getAbsolutePath().length() - ".andnav2".length()) + ".tile")); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-
 	}
 
 	public static StringBuilder readFromInputStream(InputStream i) throws IOException {
@@ -583,12 +586,9 @@ public class Algorithms {
 					removeAllFiles(c);
 				}
 			}
-			return f.delete();
-		} else {
-			return f.delete();
 		}
+		return f.delete();
 	}
-
 
 	public static long parseLongFromBytes(byte[] bytes, int offset) {
 		long o = 0xff & bytes[offset + 7];
@@ -601,7 +601,6 @@ public class Algorithms {
 		o = o << 8 | (0xff & bytes[offset]);
 		return o;
 	}
-
 
 	public static void putLongToBytes(byte[] bytes, int offset, long l) {
 		bytes[offset] = (byte) (l & 0xff);
@@ -621,7 +620,6 @@ public class Algorithms {
 		bytes[offset + 7] = (byte) (l & 0xff);
 	}
 
-
 	public static int parseIntFromBytes(byte[] bytes, int offset) {
 		int o = (0xff & bytes[offset + 3]) << 24;
 		o |= (0xff & bytes[offset + 2]) << 16;
@@ -639,7 +637,6 @@ public class Algorithms {
 		l >>= 8;
 		bytes[offset + 3] = (byte) (l & 0xff);
 	}
-
 
 	public static void writeLongInt(OutputStream stream, long l) throws IOException {
 		stream.write((int) (l & 0xff));
@@ -668,7 +665,6 @@ public class Algorithms {
 		l >>= 8;
 		stream.write(l & 0xff);
 	}
-
 
 	public static void writeSmallInt(OutputStream stream, int l) throws IOException {
 		stream.write(l & 0xff);

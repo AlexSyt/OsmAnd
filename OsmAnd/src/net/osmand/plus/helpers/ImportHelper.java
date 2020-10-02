@@ -21,6 +21,7 @@ import androidx.fragment.app.FragmentManager;
 
 import net.osmand.AndroidUtils;
 import net.osmand.CallbackWithObject;
+import net.osmand.FileUtils;
 import net.osmand.GPXUtilities;
 import net.osmand.GPXUtilities.GPXFile;
 import net.osmand.GPXUtilities.WptPt;
@@ -75,18 +76,27 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static android.app.Activity.RESULT_OK;
+import static net.osmand.IndexConstants.BINARY_MAP_INDEX_EXT;
 import static net.osmand.IndexConstants.GPX_FILE_EXT;
+import static net.osmand.IndexConstants.MAPS_PATH;
 import static net.osmand.IndexConstants.OSMAND_SETTINGS_FILE_EXT;
 import static net.osmand.IndexConstants.RENDERER_INDEX_EXT;
 import static net.osmand.IndexConstants.ROUTING_FILE_EXT;
 import static net.osmand.IndexConstants.SQLITE_CHART_FILE_EXT;
 import static net.osmand.IndexConstants.SQLITE_EXT;
+import static net.osmand.IndexConstants.TEMP_DIR;
+import static net.osmand.IndexConstants.TILES_INDEX_DIR;
 import static net.osmand.IndexConstants.WPT_CHART_FILE_EXT;
+import static net.osmand.IndexConstants.ZIP_EXT;
 import static net.osmand.data.FavouritePoint.DEFAULT_BACKGROUND_TYPE;
 import static net.osmand.plus.AppInitializer.loadRoutingFiles;
 import static net.osmand.plus.myplaces.FavoritesActivity.FAV_TAB;
 import static net.osmand.plus.myplaces.FavoritesActivity.GPX_TAB;
 import static net.osmand.plus.myplaces.FavoritesActivity.TAB_ID;
+import static net.osmand.util.Algorithms.OBF_FILE_SIGNATURE;
+import static net.osmand.util.Algorithms.SQLITE_FILE_SIGNATURE;
+import static net.osmand.util.Algorithms.XML_FILE_SIGNATURE;
+import static net.osmand.util.Algorithms.ZIP_FILE_SIGNATURE;
 
 /**
  * @author Koen Rabaey
@@ -197,12 +207,12 @@ public class ImportHelper {
 		boolean saveFile = !isFileIntent || !isOsmandSubdir;
 
 		if (fileName == null) {
-			handleGpxOrFavouritesImport(intentUri, fileName, saveFile, useImportDir, false, false);
+			importFileViaUri(intentUri, saveFile, useImportDir);
 		} else if (fileName.endsWith(KML_SUFFIX)) {
 			handleKmlImport(intentUri, fileName, saveFile, useImportDir);
 		} else if (fileName.endsWith(KMZ_SUFFIX)) {
 			handleKmzImport(intentUri, fileName, saveFile, useImportDir);
-		} else if (fileName.endsWith(IndexConstants.BINARY_MAP_INDEX_EXT)) {
+		} else if (fileName.endsWith(BINARY_MAP_INDEX_EXT)) {
 			handleObfImport(intentUri, fileName);
 		} else if (fileName.endsWith(SQLITE_EXT)) {
 			handleSqliteTileImport(intentUri, fileName);
@@ -217,6 +227,77 @@ public class ImportHelper {
 		} else {
 			handleGpxOrFavouritesImport(intentUri, fileName, saveFile, useImportDir, false, false);
 		}
+	}
+
+	private void importFileViaUri(final Uri uri, final boolean save, final boolean useImportDir) {
+		AsyncTask<Void, Void, Void> importAsyncTask = new BaseImportAsyncTask<Void, Void, Void>() {
+
+			private File dest = null;
+
+			@Override
+			protected Void doInBackground(Void... nothing) {
+				InputStream is = null;
+				OutputStream out = null;
+				try {
+					is = app.getContentResolver().openInputStream(uri);
+					if (is != null) {
+						int fileSignature = Algorithms.readInt(is);
+						dest = getDestinationFile(fileSignature);
+						if (dest != null) {
+							if (dest.getParentFile() != null && !dest.getParentFile().exists()) {
+								dest.getParentFile().mkdirs();
+							}
+							out = new FileOutputStream(dest);
+							Algorithms.writeInt(out, Integer.reverseBytes(fileSignature));
+							Algorithms.streamCopy(is, out);
+						}
+					}
+				} catch (FileNotFoundException e) {
+					log.error(e.getMessage(), e);
+				} catch (SecurityException e) {
+					log.error(e.getMessage(), e);
+				} catch (IOException e) {
+					log.error(e.getMessage(), e);
+				} finally {
+					Algorithms.closeStream(is);
+					Algorithms.closeStream(out);
+				}
+				return null;
+			}
+
+			@Override
+			protected void onPostExecute(Void result) {
+				hideProgress();
+				if (dest != null && dest.exists()) {
+					File dir = dest.getParentFile();
+					if (dir != null && TEMP_DIR.equals(dir.getName() + "/")) {
+						String ext = Algorithms.getFileExtension(dest);
+						if (ROUTING_FILE_EXT.equals("." + ext)) {
+							handleXmlFileImport(uri, dest.getName(), null);
+						}
+					}
+				}
+			}
+
+			private File getDestinationFile(int fileSignature) {
+				File dest = null;
+				if (XML_FILE_SIGNATURE == fileSignature) {
+					String name = FileUtils.createUniqueFileName(app, "xml_file", TEMP_DIR, ROUTING_FILE_EXT);
+					dest = app.getAppPath(TEMP_DIR + name + ROUTING_FILE_EXT);
+				} else if (OBF_FILE_SIGNATURE == fileSignature) {
+					String name = FileUtils.createUniqueFileName(app, "map", MAPS_PATH, BINARY_MAP_INDEX_EXT);
+					dest = app.getAppPath(MAPS_PATH + name + BINARY_MAP_INDEX_EXT);
+				} else if (ZIP_FILE_SIGNATURE == fileSignature) {
+					String name = FileUtils.createUniqueFileName(app, "zip_file", TEMP_DIR, ZIP_EXT);
+					dest = app.getAppPath(TEMP_DIR + name + ZIP_EXT);
+				} else if (SQLITE_FILE_SIGNATURE == fileSignature) {
+					String name = FileUtils.createUniqueFileName(app, "online_map", TILES_INDEX_DIR, SQLITE_EXT);
+					dest = app.getAppPath(TILES_INDEX_DIR + name + SQLITE_EXT);
+				}
+				return dest;
+			}
+		};
+		executeImportTask(importAsyncTask);
 	}
 
 	public static String getNameFromContentUri(OsmandApplication app, Uri contentUri) {
@@ -544,7 +625,7 @@ public class ImportHelper {
 
 			@Override
 			protected String doInBackground(Void... voids) {
-				return copyFile(app, app.getAppPath(IndexConstants.TILES_INDEX_DIR + name), uri, false);
+				return copyFile(app, app.getAppPath(TILES_INDEX_DIR + name), uri, false);
 			}
 
 			@Override
@@ -644,7 +725,7 @@ public class ImportHelper {
 
 			@Override
 			protected String doInBackground(Void... voids) {
-				File tempDir = app.getAppPath(IndexConstants.TEMP_DIR);
+				File tempDir = app.getAppPath(TEMP_DIR);
 				if (!tempDir.exists()) {
 					tempDir.mkdirs();
 				}
@@ -654,7 +735,7 @@ public class ImportHelper {
 
 			@Override
 			protected void onPostExecute(String error) {
-				File tempDir = app.getAppPath(IndexConstants.TEMP_DIR);
+				File tempDir = app.getAppPath(TEMP_DIR);
 				final File file = new File(tempDir, name);
 				if (error == null && file.exists()) {
 					app.getSettingsHelper().collectSettings(file, latestChanges, version, new SettingsCollectListener() {

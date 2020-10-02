@@ -27,7 +27,8 @@ public class IndexConstants {
 	public static final String BINARY_SRTM_MAP_INDEX_EXT_ZIP = ".srtm.obf.zip"; //$NON-NLS-1$
 	public static final String EXTRA_EXT = ".extra";
 	public static final String EXTRA_ZIP_EXT = ".extra.zip";
-	
+	public static final String ZIP_EXT = ".zip";
+
 	public static final String GEN_LOG_EXT = ".gen.log"; //$NON-NLS-1$
 	
 	public static final String VOICE_INDEX_EXT_ZIP = ".voice.zip"; //$NON-NLS-1$
